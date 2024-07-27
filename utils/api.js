@@ -19,7 +19,6 @@ export const sendOTP = async (email, otp) => {
 
   try {
     const response = await axios.get(`${url}?${params.toString()}`);
-    console.log(response.data)
     return response.data;
   } catch (error) {
     console.error('Error sending otp try again later!', error);
@@ -30,7 +29,6 @@ export const sendOTP = async (email, otp) => {
 export const directions = async (from, to) => {
   try {
     const response = await axios.get(`https://api.mapbox.com/directions/v5/mapbox/driving/${from};${to}?geometries=geojson&access_token=pk.eyJ1IjoiYWJpc29pdmMiLCJhIjoiY2x5eDh0Z2k0MDcwNTJrcHN0aXl1anA2MiJ9.S94O4y8MKnzyyH7dS_thFw`);
-    console.log(response.data)
     return response.data;
   } catch (error) {
     console.error('Error getting directions try again later!', error);
@@ -41,7 +39,6 @@ export const directions = async (from, to) => {
 export const reverseGeocode = async (longitude, latitude) => {
   try {
     const response = await axios.get(`https://api.mapbox.com/search/geocode/v6/reverse?longitude=${longitude}&latitude=${latitude}&access_token=pk.eyJ1IjoiYWJpc29pdmMiLCJhIjoiY2x5eDh0Z2k0MDcwNTJrcHN0aXl1anA2MiJ9.S94O4y8MKnzyyH7dS_thFw`);
-    console.log(response.data)
     return response.data;
   } catch (error) {
     console.error('Error getting directions try again later!', error);

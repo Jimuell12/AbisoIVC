@@ -8,6 +8,8 @@ import Register from '../screens/Register';
 import Dashboard from '../screens/Dashboard';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../utils/firebaseConfig';
+import UserDashboard from '../screens/UserDashboard';
+import Settings from '../screens/Settings';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,6 +46,8 @@ export default function AppNavigation() {
         <Stack.Screen name="Login" options={{ headerShown: false }} component={Login} />
         <Stack.Screen name="Register" options={{ headerShown: false }} component={Register} />
         <Stack.Screen name="Dashboard" options={{ headerShown: false }} component={Dashboard} />
+        <Stack.Screen name="UserDashboard" options={{ headerShown: false }} component={UserDashboard} />
+        <Stack.Screen name="Settings" options={{ headerShown: false }} component={Settings} />
       </Stack.Navigator>
     </NavigationContainer>
   );

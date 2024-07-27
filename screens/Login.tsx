@@ -4,7 +4,8 @@ import { Link, useNavigation, CommonActions } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar'
 import React, { useRef, useState } from 'react';
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from '../utils/firebaseConfig';
+import { auth, db } from '../utils/firebaseConfig';
+import { get, ref } from 'firebase/database';
 
 export default function Login() {
     const navigation = useNavigation();
@@ -18,12 +19,27 @@ export default function Login() {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             // Signed in
             const user = userCredential.user;
-            navigation.dispatch(
-                CommonActions.reset({
-                  index: 0, // The index of the active route
-                  routes: [{ name: 'Dashboard' }], // The name of the screen you want to navigate to
-                })
-              );
+            const userRef = ref(db, 'users/' + user.uid);
+            get(userRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                    const role = snapshot.val().role;
+                    if(role === "user") {
+                        navigation.dispatch(
+                            CommonActions.reset({
+                              index: 0,
+                              routes: [{ name: 'UserDashboard' }], 
+                            })
+                          );
+                    } else {
+                        navigation.dispatch(
+                            CommonActions.reset({
+                              index: 0,
+                              routes: [{ name: 'Dashboard' }], 
+                            })
+                          );
+                    }
+                }
+            });
         } catch (error:any) {
             Alert.alert('Login Error', 'Invalid email or password');
             // Handle login error (e.g., show an alert)

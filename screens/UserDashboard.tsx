@@ -1,9 +1,12 @@
+import { View, Text } from 'react-native'
 import React from 'react'
+import { auth } from '../utils/firebaseConfig';
 
-function UserDashboard() {
+export default function UserDashboard() {
+
   return (
-    <div>UserDashboard</div>
+    <View>
+      <Text>UserDashboard</Text>
+    </View>
   )
 }
-
-export default UserDashboard

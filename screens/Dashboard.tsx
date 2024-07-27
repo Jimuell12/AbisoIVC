@@ -5,7 +5,7 @@ import { auth, db } from '../utils/firebaseConfig';
 import * as Location from 'expo-location';
 import { Entypo } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
-import { CommonActions, useNavigation } from '@react-navigation/native';
+import { CommonActions, Link, useNavigation } from '@react-navigation/native';
 import Mapbox from '@rnmapbox/maps';
 import { get, ref, set } from 'firebase/database'
 import { directions, reverseGeocode } from '../utils/api';
@@ -111,6 +111,14 @@ export default function Dashboard() {
       );
     });
   };
+  const settings = () => {
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'Settings',
+      })
+    );
+  }
+
 
   return (
     <SafeAreaView className='flex-1 p-2 bg-white'>
@@ -121,7 +129,7 @@ export default function Dashboard() {
           <Text className='text-xl font-bold text-black'>Abiso IVC</Text>
         </View>
         <View className='flex-row items-center gap-2'>
-          <TouchableOpacity className='w-12 h-12 rounded-full'>
+          <TouchableOpacity className='w-12 h-12 rounded-full' onPress={settings}>
             <Image className='w-full h-full' source={imageUrl}></Image>
           </TouchableOpacity>
           <TouchableOpacity className='border border-gray-300 p-2 rounded-full' onPress={logout}>
@@ -131,12 +139,12 @@ export default function Dashboard() {
       </View>
       {location ? (
         <View className='flex-1 rounded-3xl my-4 justify-center items-center relative overflow-hidden drop-shadow-xl shadow-black'>
-          <Mapbox.MapView 
-              attributionEnabled={false}
-              compassEnabled={true}
-              logoEnabled={false}
-              scaleBarEnabled={false}
-              className='w-full h-full'>
+          <Mapbox.MapView
+            attributionEnabled={false}
+            compassEnabled={true}
+            logoEnabled={false}
+            scaleBarEnabled={false}
+            className='w-full h-full'>
             <Mapbox.Camera
               zoomLevel={16}
               followUserLocation={true}
@@ -149,7 +157,7 @@ export default function Dashboard() {
             <Mapbox.LocationPuck
               puckBearingEnabled={true}
               puckBearing="heading"
-              pulsing={{ isEnabled: true, color: '#FF5733', radius: 50 }} 
+              pulsing={{ isEnabled: true, color: '#FF5733', radius: 50 }}
             />
             {routeGeoJson ? (
               <Mapbox.ShapeSource id="routeSource" shape={routeGeoJson}>
@@ -159,7 +167,7 @@ export default function Dashboard() {
                     lineColor: '#007cbf',
                     lineWidth: 5,
                   }}
-                />  
+                />
               </Mapbox.ShapeSource>
             ) : null}
           </Mapbox.MapView>
@@ -182,21 +190,20 @@ export default function Dashboard() {
                 <View className='p-2 bg-gray-100 rounded-full'><Entypo name="location-pin" size={18} color="black" /></View>
                 <Text>{(distance / 1000).toFixed(2)} km</Text>
                 <Text
-                  className={`${
-                    travelTime > 1800
-                      ? 'text-red-400'
-                      : 'text-green-400'
-                  }`}
+                  className={`${travelTime > 1800
+                    ? 'text-red-400'
+                    : 'text-green-400'
+                    }`}
                 >
                   ({(travelTime / 60).toFixed(2)} mins)
                 </Text>
-              </View> 
+              </View>
               <View className='flex-row items-center space-x-2 rounded-full'>
                 <View className='p-2 bg-gray-100 rounded-full'><Entypo name="clock" size={18} color="black" /></View>
                 <Text>10:00 AM</Text>
               </View>
               <View className='flex-row items-center space-x-2 rounded-full'>
-              <View className='p-2 bg-gray-100 rounded-full'><Entypo name="user" size={18} color="black" /></View>
+                <View className='p-2 bg-gray-100 rounded-full'><Entypo name="user" size={18} color="black" /></View>
                 <Text>Jimuel Flojera</Text>
               </View>
               <View className='flex-row items-center space-x-2 rounded-full'>
