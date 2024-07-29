@@ -7,9 +7,10 @@ import { getData } from '../utils/asyncStorage';
 import Register from '../screens/Register';
 import Dashboard from '../screens/Dashboard';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../utils/firebaseConfig';
+import { auth, db } from '../utils/firebaseConfig';
 import UserDashboard from '../screens/UserDashboard';
 import Settings from '../screens/Settings';
+import { get, ref } from 'firebase/database';
 
 const Stack = createNativeStackNavigator();
 
@@ -22,7 +23,18 @@ export default function AppNavigation() {
 
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      setInitialRouteName('Dashboard');
+      const userRef = ref(db, 'users/' + user.uid);
+      get(userRef).then((snapshot) => {
+          if (snapshot.exists()) {
+              const role = snapshot.val().role;
+              if(role === "user") {
+                setInitialRouteName('UserDashboard');
+              } else {
+                setInitialRouteName('Dashboard');
+              }
+            }
+          }
+        );
     } else {
       setInitialRouteName('OnBoarding');
     }

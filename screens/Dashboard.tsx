@@ -9,18 +9,20 @@ import { CommonActions, Link, useNavigation } from '@react-navigation/native';
 import Mapbox from '@rnmapbox/maps';
 import { get, ref, set } from 'firebase/database'
 import { directions, reverseGeocode } from '../utils/api';
+import LottieView from 'lottie-react-native';
 
 Mapbox.setAccessToken('pk.eyJ1IjoiYWJpc29pdmMiLCJhIjoiY2x5eDh0Z2k0MDcwNTJrcHN0aXl1anA2MiJ9.S94O4y8MKnzyyH7dS_thFw');
 
 export default function Dashboard() {
   const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
   const [name, setName] = useState('');
-  const [imageUrl, setImageUrl] = useState(require('../assets/images/profile.jpg'));
+  const [imageUrl, setImageUrl] = useState(require('../assets/images/profile2.jpg'));
   const [routeGeoJson, setRouteGeoJson] = useState<any>();
   const navigation = useNavigation();
   const [distance, setDistance] = useState(0);
   const [travelTime, setTravelTime] = useState(0);
   const [locationName, setLocationName] = useState('');
+  const [followUserLocation, setFollowUserLocation] = useState(true);
 
   useEffect(() => {
     const requestLocationPermission = async () => {
@@ -129,11 +131,11 @@ export default function Dashboard() {
           <Text className='text-xl font-bold text-black'>Abiso IVC</Text>
         </View>
         <View className='flex-row items-center gap-2'>
-          <TouchableOpacity className='w-12 h-12 rounded-full' onPress={settings}>
-            <Image className='w-full h-full' source={imageUrl}></Image>
-          </TouchableOpacity>
-          <TouchableOpacity className='border border-gray-300 p-2 rounded-full' onPress={logout}>
-            <Entypo name="dots-three-horizontal" size={24} color="black" />
+            <TouchableOpacity className='border border-gray-300 h-10 w-10 rounded-full overflow-hidden' onPress={settings}>
+              <Image className='w-full h-full' source={imageUrl}></Image>
+            </TouchableOpacity>
+          <TouchableOpacity className='border border-gray-300 h-10 w-10 p-2 rounded-full items-center justify-center' onPress={logout}>
+            <Entypo name="dots-three-horizontal" size={17} color="black" />
           </TouchableOpacity>
         </View>
       </View>
@@ -144,16 +146,21 @@ export default function Dashboard() {
             compassEnabled={true}
             logoEnabled={false}
             scaleBarEnabled={false}
-            className='w-full h-full'>
-            <Mapbox.Camera
-              zoomLevel={16}
-              followUserLocation={true}
-              followUserMode={Mapbox.UserTrackingMode.FollowWithHeading}
-              centerCoordinate={[location.longitude, location.latitude]}
-              followZoomLevel={16}
-              animationMode='flyTo'
-              animationDuration={0}
-            />
+            className='w-full h-full'
+            onTouchMove={() => setFollowUserLocation(false)}
+            >
+            {followUserLocation ? (
+              <Mapbox.Camera
+                zoomLevel={16}
+                followUserLocation={true}
+                followUserMode={Mapbox.UserTrackingMode.FollowWithHeading}
+                centerCoordinate={[location.longitude, location.latitude]}
+                followZoomLevel={16}
+                animationMode='flyTo'
+                animationDuration={0}
+              />
+              
+            ) : null}
             <Mapbox.LocationPuck
               puckBearingEnabled={true}
               puckBearing="heading"
@@ -164,17 +171,28 @@ export default function Dashboard() {
                 <Mapbox.LineLayer
                   id="routeLayer"
                   style={{
-                    lineColor: '#007cbf',
+                    lineColor: '#FF5733',
                     lineWidth: 5,
                   }}
                 />
               </Mapbox.ShapeSource>
             ) : null}
+            <Mapbox.MarkerView
+              coordinate={[121.0892689, 14.6219004]}
+            >
+              <LottieView
+                autoPlay
+                style={{
+                  width: 75,
+                  height: 75,
+                }}
+                source={require('../assets/animations/earthquake.json')}/>
+            </Mapbox.MarkerView>
           </Mapbox.MapView>
           <TouchableOpacity
             className='absolute top-2 left-2 bg-white p-2 rounded-full'
-
-          >
+            onPress={() => setFollowUserLocation(true)}
+            >
             <Ionicons name="locate" size={24} color="black" />
           </TouchableOpacity>
           <View className='absolute bottom-0 rounded-xl w-[97%] bg-white h-85 p-4 mb-2 mx-auto'>
