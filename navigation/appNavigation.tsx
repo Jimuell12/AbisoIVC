@@ -9,6 +9,7 @@ import Dashboard from '../screens/Dashboard';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../utils/firebaseConfig';
 import UserDashboard from '../screens/UserDashboard';
+import Messages from '../screens/Messages';
 import Settings from '../screens/Settings';
 import { get, ref } from 'firebase/database';
 
@@ -60,6 +61,7 @@ export default function AppNavigation() {
         <Stack.Screen name="Dashboard" options={{ headerShown: false }} component={Dashboard} />
         <Stack.Screen name="UserDashboard" options={{ headerShown: false }} component={UserDashboard} />
         <Stack.Screen name="Settings" options={{ headerShown: false }} component={Settings} />
+        <Stack.Screen name="Messages" options={{ headerShown: false }} component={Messages} />
       </Stack.Navigator>
     </NavigationContainer>
   );
