@@ -7,7 +7,7 @@ import { Entypo } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import { CommonActions, Link, useNavigation } from '@react-navigation/native';
 import Mapbox from '@rnmapbox/maps';
-import { get, ref, set } from 'firebase/database'
+import { get, onValue, ref, set } from 'firebase/database'
 import { directions, reverseGeocode } from '../utils/api';
 import LottieView from 'lottie-react-native';
 
@@ -19,10 +19,12 @@ export default function Dashboard() {
   const [imageUrl, setImageUrl] = useState(require('../assets/images/profile2.jpg'));
   const [routeGeoJson, setRouteGeoJson] = useState<any>();
   const navigation = useNavigation();
+  const [destination, setDestination] = useState('121.0892689,14.6219004');
   const [distance, setDistance] = useState(0);
   const [travelTime, setTravelTime] = useState(0);
   const [locationName, setLocationName] = useState('');
   const [followUserLocation, setFollowUserLocation] = useState(true);
+  const [incident, setIncident] = useState([]);
 
   useEffect(() => {
     const requestLocationPermission = async () => {
@@ -41,8 +43,6 @@ export default function Dashboard() {
         },
         (newLocation) => {
           setLocation(newLocation.coords);
-          // Update the route based on the new location
-          updateRoute(newLocation.coords);
         }
       );
 
@@ -74,6 +74,34 @@ export default function Dashboard() {
 
     requestLocationPermission();
     updateUserDetails();
+  }, []);
+
+  useEffect(() => {
+    const incidentsRef = ref(db, 'incidents');
+    const handleIncidentsUpdate = (snapshot: any) => {
+      if (snapshot.exists()) {
+        snapshot.forEach((uuidSnapshot: any) => {
+          const incident = uuidSnapshot.val();
+          const rescuers = incident.rescuers || {}; 
+          const isCurrentUserInRescuers: any = Object.keys(rescuers).map(incident => rescuers[incident]);
+          console.log(isCurrentUserInRescuers)
+        });
+      }else {
+        const incidents = snapshot.val();
+        const incidentsArray: any = Object.keys(incidents).map((key) => incidents[key]);
+        
+        setIncident(incidentsArray);
+        if(location){
+          updateRoute(location);
+        }
+      }
+    };
+
+    const unsubscribe = onValue(incidentsRef, handleIncidentsUpdate);
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const updateRoute = async (coords: Location.LocationObjectCoords) => {
@@ -131,9 +159,9 @@ export default function Dashboard() {
           <Text className='text-xl font-bold text-black'>Abiso IVC</Text>
         </View>
         <View className='flex-row items-center gap-2'>
-            <TouchableOpacity className='border border-gray-300 h-10 w-10 rounded-full overflow-hidden' onPress={settings}>
-              <Image className='w-full h-full' source={imageUrl}></Image>
-            </TouchableOpacity>
+          <TouchableOpacity className='border border-gray-300 h-10 w-10 rounded-full overflow-hidden' onPress={settings}>
+            <Image className='w-full h-full' source={imageUrl}></Image>
+          </TouchableOpacity>
           <TouchableOpacity className='border border-gray-300 h-10 w-10 p-2 rounded-full items-center justify-center' onPress={logout}>
             <Entypo name="dots-three-horizontal" size={17} color="black" />
           </TouchableOpacity>
@@ -148,7 +176,7 @@ export default function Dashboard() {
             scaleBarEnabled={false}
             className='w-full h-full'
             onTouchMove={() => setFollowUserLocation(false)}
-            >
+          >
             {followUserLocation ? (
               <Mapbox.Camera
                 zoomLevel={16}
@@ -159,7 +187,7 @@ export default function Dashboard() {
                 animationMode='flyTo'
                 animationDuration={0}
               />
-              
+
             ) : null}
             <Mapbox.LocationPuck
               puckBearingEnabled={true}
@@ -177,22 +205,56 @@ export default function Dashboard() {
                 />
               </Mapbox.ShapeSource>
             ) : null}
-            <Mapbox.MarkerView
-              coordinate={[121.0892689, 14.6219004]}
-            >
-              <LottieView
-                autoPlay
-                style={{
-                  width: 75,
-                  height: 75,
-                }}
-                source={require('../assets/animations/earthquake.json')}/>
-            </Mapbox.MarkerView>
+            {incident.map((incidentDetails: any, index) => (
+              <Mapbox.MarkerView
+                key={incidentDetails.timestamp}
+                allowOverlap={true}
+                allowOverlapWithPuck={true}
+                coordinate={[incidentDetails.location.longitude, incidentDetails.location.latitude]}
+              >
+                <TouchableOpacity onPress={() => {
+
+                }}>
+                  {incidentDetails.type === 'fire' ? (<LottieView
+                    autoPlay
+                    style={{
+                      width: 75,
+                      height: 75,
+                    }}
+                    source={require(`../assets/animations/fire.json`)}
+                  />) : null}
+                  {incidentDetails.type === 'flood' ? (<LottieView
+                    autoPlay
+                    style={{
+                      width: 75,
+                      height: 75,
+                    }}
+                    source={require(`../assets/animations/flood.json`)}
+                  />) : null}
+                  {incidentDetails.type === 'earthquake' ? (<LottieView
+                    autoPlay
+                    style={{
+                      width: 75,
+                      height: 75,
+                    }}
+                    source={require(`../assets/animations/earthquake.json`)}
+                  />) : null}
+                  {incidentDetails.type === 'manmade' ? (<LottieView
+                    autoPlay
+                    style={{
+                      width: 75,
+                      height: 75,
+                    }}
+                    source={require(`../assets/animations/manmade.json`)}
+                  />) : null}
+                </TouchableOpacity>
+              </Mapbox.MarkerView>
+            ))}
           </Mapbox.MapView>
           <TouchableOpacity
             className='absolute top-2 left-2 bg-white p-2 rounded-full'
             onPress={() => setFollowUserLocation(true)}
-            >
+          >
             <Ionicons name="locate" size={24} color="black" />
           </TouchableOpacity>
           <View className='absolute bottom-0 rounded-xl w-[97%] bg-white h-85 p-4 mb-2 mx-auto'>
@@ -241,7 +303,12 @@ export default function Dashboard() {
         </View>
       ) : (
         <View className='flex-1 justify-center items-center'>
-          <Text>Loading...</Text>
+          <LottieView
+            source={require('../assets/animations/loading.json')}
+            autoPlay
+            loop
+            style={{ width: 200, height: 200 }}
+          />
         </View>
       )}
     </SafeAreaView>
