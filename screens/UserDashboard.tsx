@@ -1,10 +1,10 @@
-import { View, Text, Image, TouchableOpacity, Alert, Modal } from 'react-native'
+import { View, Text, Image, TouchableOpacity, Alert, Modal, Linking } from 'react-native'
 import React, { useEffect, useRef, useState } from 'react'
 import { Entypo } from '@expo/vector-icons';
 import { auth, db } from '../utils/firebaseConfig';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { equalTo, get, onValue, push, query, ref, remove, set } from 'firebase/database';
+import { equalTo, get, onValue, push, query, ref, remove, set, update } from 'firebase/database';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import Mapbox from '@rnmapbox/maps';
 import { Ionicons, AntDesign, FontAwesome5, FontAwesome6 } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import ImageSlider from '../components/imageSlider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { StatusBar } from 'expo-status-bar';
+import { reverseGeocode } from '../utils/api';
 
 Mapbox.setAccessToken('pk.eyJ1IjoiYWJpc29pdmMiLCJhIjoiY2x5eDh0Z2k0MDcwNTJrcHN0aXl1anA2MiJ9.S94O4y8MKnzyyH7dS_thFw');
 
@@ -61,7 +62,11 @@ export default function UserDashboard() {
   const [rescuerIds, setRescuerIds] = useState([]);
   const [incidentId, setIncidentId] = useState('');
   const [userMobile, setUserMobile] = useState('');
-
+  const cameraRef = useRef<Mapbox.Camera | null>(null);
+  const [cameraCoordinates, setCameraCoordinates] = useState<[number, number]>([0, 0]);
+  const [rescuerDetailsVisible, setRescuerDetailsVisible] = useState(false);
+  const [rescuerDetails, setRescuerDetails] = useState({ name: '', imageUrl: '', mobile: '', email: '' });
+  const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
     const requestLocationPermission = async () => {
@@ -79,7 +84,7 @@ export default function UserDashboard() {
         },
         (newLocation) => {
           setLocation(newLocation.coords);
-
+          setCameraCoordinates([newLocation.coords.longitude, newLocation.coords.latitude]);
         }
       );
 
@@ -123,56 +128,63 @@ export default function UserDashboard() {
 
       const handleIncidentsUpdate = (snapshot: any) => {
         if (snapshot.exists()) {
-          let check = false;
           snapshot.forEach((uuidSnapshot: any) => {
             const uuid = uuidSnapshot.key;
             const incidentData = uuidSnapshot.val();
-
-            if (incidentData.reportedBy === currentUserUid && incidentData.status === 'pending') {
-              check = true;
-              const numberOfRescuers = incidentData.numberofRescuer || 0;
-              setModalVisible(true)
-              setIncident(incidentData.type);
-              setMessageVisible(true);
-
-              // If there are no rescuers, set a timeout to delete the incident
-              if (numberOfRescuers === 0) {
-                clearInterval(intervalRef.current!); // Clear any existing intervals
-
-                intervalRef.current = setInterval(() => {
+      
+            if (incidentData.reportedBy === currentUserUid) {
+              if (incidentData.status === 'pending') {
+                const numberOfRescuers = incidentData.numberofRescuer || 0;
+                setModalVisible(true);
+                setIncident(incidentData.type);
+                setMessageVisible(true);
+      
+                if (numberOfRescuers === 0) {
+                  clearInterval(intervalRef.current!);
+      
+                  intervalRef.current = setInterval(() => {
+                    setModalVisible(false);
+                    setIncident('');
+                    setMessageVisible(false);
+                    remove(ref(db, `incidents/${uuid}`))
+                      .then(() => {
+                        Alert.alert('Rescue Unavailable', 'No available rescuers at the moment.');
+                      })
+                      .catch((error) => {
+                        console.error('Error deleting incident:', error);
+                      });
+                  }, 30000);
+                } else if (numberOfRescuers > 0) {
+                  clearInterval(intervalRef.current!);
                   setModalVisible(false);
-                  setIncident('');
-                  setMessageVisible(false);
-                  remove(ref(db, `incidents/${uuid}`))
-                    .then(() => {
-                      Alert.alert('Rescue Unavailable', 'No available rescuers at the moment.');
-                      check = false;
-                      clearInterval(intervalRef.current!);  
-                    })
-                    .catch((error) => {
-                      console.error('Error deleting incident:', error);
-                    });
-                }, 30000); // Check every 10 seconds
-              } else if (numberOfRescuers > 0) {
-                clearInterval(intervalRef.current!);
-                setModalVisible(false);
-                const rescuers = incidentData.rescuers || [];
-                const rescuerArray: any = Object.keys(rescuers).map(uid => rescuers[uid]);
-                setRescuerLocations(rescuerArray);
-                setIncidentId(uuid);
+                  setRescuerLocations([]);
+                  const rescuers = incidentData.rescuers || [];
+                  const rescuerArray: any = Object.keys(rescuers).map(uid => rescuers[uid]);
+                  if (rescuerArray.length > 0) {
+                    setRescuerLocations(rescuerArray);
+                    setFollowUserLocation(false);
+                    setCameraCoordinates([rescuerArray[0].location.longitude, rescuerArray[0].location.latitude]);
+                    setFollowUserLocation(true);
+                  }
+                  setIncidentId(uuid);
+                }
+              } else if (incidentData.status === 'resolved' && !incidentData.alerted) {
+                // Only alert if the incident is resolved and hasn't been alerted before
+                setRescuerLocations([]);
+                setIncident('');
+                setMessageVisible(false);
+                Alert.alert('Incident Resolved', 'Your previous incident request has been successfully resolved.');
+      
+                // Update the incident to mark it as alerted to avoid future alerts
+                update(ref(db, `incidents/${uuid}`), { alerted: true });
               }
-            } else if(incidentData.reportedBy === currentUserUid && incidentData.status === 'resolved' && !check) {
-              setRescuerLocations([]);
-              setIncident('');
-              setMessageVisible(false);
-              return;
             }
           });
         } else {
           clearInterval(intervalRef.current!);
         }
-
       };
+      
 
       const unsubscribe = onValue(incidentsRef, handleIncidentsUpdate);
 
@@ -185,19 +197,6 @@ export default function UserDashboard() {
     }
   }, []);
 
-
-
-
-  const logout = () => {
-    auth.signOut().then(() => {
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        })
-      );
-    });
-  };
   const settings = () => {
     navigation.dispatch(
       CommonActions.navigate({
@@ -206,10 +205,11 @@ export default function UserDashboard() {
     );
   }
 
-  const handelIncidents = (incidentType: string) => {
+  const handelIncidents = async (incidentType: string) => {
     setIncident(incidentType);
     setModalVisible(true);
     const incidentRef = ref(db, 'incidents/');
+    const locationName = await reverseGeocode(location?.longitude, location?.latitude);
     push(incidentRef, {
       type: incidentType,
       location: {
@@ -218,6 +218,7 @@ export default function UserDashboard() {
       },
       userName: name,
       userMobile: userMobile,
+      locationName: locationName.features[0].properties.full_address,
       userEmail: auth.currentUser?.email,
       reportedBy: auth.currentUser?.uid,
       status: 'pending',
@@ -226,7 +227,80 @@ export default function UserDashboard() {
     }).then(() => {
       console.log('Success', 'Incident reported successfully)');
     })
+
+    const alarmRef = ref(db, 'alarm/ivc');
+    set(alarmRef, true)
   }
+
+  const handleRescuerDetails = (rescuerId: any) => {
+    setRescuerDetailsVisible(true);
+    console.log(rescuerId)
+    const rescuerRef = ref(db, 'users/' + rescuerId);
+    get(rescuerRef).then((snapshot) => {
+      if (snapshot.exists()) {
+        const name = snapshot.val().name;
+        const imageUrl = snapshot.val().imageUrl;
+        const mobile = snapshot.val().mobile;
+        const email = snapshot.val().email;
+        setRescuerDetails({
+          name: name,
+          imageUrl: imageUrl,
+          mobile: mobile,
+          email: email,
+        });
+      } else {
+        setRescuerDetails({
+          name: "",
+          imageUrl: "imageUrl",
+          mobile: "mobile",
+          email: "email",
+        });
+      }
+    }).catch((error) => {
+      console.error(error);
+    });
+
+  };
+
+  const handleCancelIncident = () => {
+    const confirmCancel = () => {
+      Alert.alert(
+        'Confirm Cancel',
+        'Are you sure you want to cancel this incident?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Confirm',
+            onPress: deleteIncident,
+          },
+        ],
+      );
+    };
+
+    const deleteIncident = () => {
+      const incidentRef = ref(db, 'incidents/' + incidentId);
+      remove(incidentRef)
+        .then(() => {
+          setRescuerLocations([]);
+          setIncident('');
+          setMessageVisible(false);
+          setRescuerDetailsVisible(false);
+          Alert.alert('Incident Cancelled', 'Incident has been cancelled successfully.');
+        })
+        .catch((error) => {
+          console.error('Error deleting incident:', error);
+        });
+    };
+
+    confirmCancel();
+  };
+
+  const handleToggleView = () => {
+    setIsMinimized(!isMinimized);
+  };
 
   return (
     <SafeAreaView className='flex-1 p-2 bg-white'>
@@ -240,9 +314,6 @@ export default function UserDashboard() {
         <View className='flex-row items-center gap-2'>
           <TouchableOpacity className='border border-gray-300 h-10 w-10 rounded-full overflow-hidden' onPress={settings}>
             <Image className='w-full h-full' source={imageUrl}></Image>
-          </TouchableOpacity>
-          <TouchableOpacity className='border border-gray-300 h-10 w-10 p-2 rounded-full items-center justify-center' onPress={logout}>
-            <Entypo name="dots-three-horizontal" size={17} color="black" />
           </TouchableOpacity>
         </View>
       </View>
@@ -258,8 +329,9 @@ export default function UserDashboard() {
           >
             {followUserLocation ? (
               <Mapbox.Camera
+                ref={cameraRef}
                 zoomLevel={16}
-                centerCoordinate={[location.longitude, location.latitude]}
+                centerCoordinate={cameraCoordinates}
                 followZoomLevel={16}
                 animationMode='flyTo'
                 animationDuration={2000}
@@ -271,14 +343,14 @@ export default function UserDashboard() {
               puckBearing="heading"
               pulsing={{ isEnabled: true, color: '#FF5733', radius: 200 }}
             />
-            {rescuerLocations.map((rescueLocation : any, index) => (
+            {rescuerLocations.map((rescueLocation: any, index) => (
               <Mapbox.MarkerView
                 key={rescueLocation.id}
                 allowOverlap={true}
                 allowOverlapWithPuck={true}
                 coordinate={[rescueLocation.location.longitude, rescueLocation.location.latitude]}
               >
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => handleRescuerDetails(rescueLocation.id)}>
                   <LottieView
                     autoPlay
                     style={{
@@ -315,41 +387,97 @@ export default function UserDashboard() {
               )}
             </TouchableOpacity>
           ) : null}
+          {messageVisible ? (
+            <TouchableOpacity
+              className="absolute top-14 right-2 bg-white p-2 rounded-full"
+              onPress={handleCancelIncident}
+            >
+              <AntDesign name="exclamationcircle" size={24} color="red" />
+            </TouchableOpacity>
+          ) : null}
 
           {!incident ? (
-            <View className='absolute bottom-0 rounded-xl w-[97%] bg-white h-85 p-4 mb-2 mx-auto'>
-              <Text className='text-sm text-gray-400'>Report Incident</Text>
+            <View className={`absolute bottom-0 rounded-xl w-[97%] bg-white p-4 mb-2 mx-auto ${isMinimized ? 'h-30' : 'h-85'}`}>
+              <TouchableOpacity onPress={handleToggleView} className="flex-row justify-between items-center">
+                <Text className='text-sm text-gray-400'>{isMinimized ? 'Show Reports' : 'Report Incident:'}</Text>
+                <Ionicons name={isMinimized ? "chevron-up" : "chevron-down"} size={24} color="gray" />
+              </TouchableOpacity>
+
+              {!isMinimized && (
+                <>
+                  <View className='border-gray-200 border-b mx-2 my-2' />
+                  <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
+                    <View className='p-3 w-12 items-center bg-[#cce5ff] rounded-xl'>
+                      <FontAwesome6 name="house-flood-water" size={20} color="#339af0" />
+                    </View>
+                    <TouchableOpacity className='bg-[#cce5ff] p-3 flex-1 rounded-xl items-center shadow-md justify-center mt-2' onPress={() => handelIncidents("flood")}>
+                      <Text className='text-[#339af0]'>Flood</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
+                    <View className='p-3 w-12 items-center bg-[#ffccd5] rounded-xl'>
+                      <FontAwesome6 name="house-fire" size={20} color="#ff5252" />
+                    </View>
+                    <TouchableOpacity className='bg-[#ffccd5] p-3 flex-1 rounded-xl shadow-md items-center justify-center mt-2' onPress={() => handelIncidents("fire")}>
+                      <Text className='text-[#ff5252]'>Fire</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
+                    <View className='p-3 w-12 items-center bg-[#e4d8c3] rounded-xl'>
+                      <FontAwesome5 name="house-damage" size={20} color="#8d5524" />
+                    </View>
+                    <TouchableOpacity className='bg-[#e4d8c3] p-3 flex-1 rounded-xl shadow-md items-center justify-center mt-2' onPress={() => handelIncidents("earthquake")}>
+                      <Text className='text-[#8d5524]'>Earthquake</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
+                    <View className='p-3 w-12 items-center bg-[#1f1f1f6e] rounded-xl'>
+                      <FontAwesome5 name="skull-crossbones" size={20} color="#1f1f1f" />
+                    </View>
+                    <TouchableOpacity className='bg-[#1f1f1f6e] p-3 flex-1 rounded-xl shadow-md items-center justify-center mt-2' onPress={() => handelIncidents("manmade")}>
+                      <Text className='text-[#1f1f1f]'>Man Made</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+            </View>
+          ) : null}
+          {rescuerDetailsVisible ? (
+            <View className={`absolute bottom-0 rounded-xl w-[97%] bg-white p-4 mb-2 mx-auto h-85'}`}>
+              <TouchableOpacity onPress={() => setRescuerDetailsVisible(false)} className="flex-row justify-between items-center">
+                <Text className='text-sm text-gray-400'>Rescuer Details:</Text>
+                <Ionicons name="chevron-down" size={24} color="gray" />
+              </TouchableOpacity>
+              <Text className='text-base font-semibold text-[#3685cd]'>{rescuerDetails.name}</Text>
+
               <View className='border-gray-200 border-b mx-2 my-2' />
-              <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
-                <View className='p-3 w-12 items-center bg-[#cce5ff] rounded-xl'>
-                  <FontAwesome6 name="house-flood-water" size={20} color="#339af0" />
+              <View className='flex-col justify-between gap-1'>
+                <View className='flex-row items-center space-x-2 rounded-full'>
+                  <View className='p-2 bg-gray-100 rounded-full'>
+                    <Entypo name="phone" size={18} color="black" />
+                  </View>
+                  <Text onPress={() => { Linking.openURL(`tel:${rescuerDetails.mobile}`); }} className='text-black'>{rescuerDetails.mobile}</Text>
                 </View>
-                <TouchableOpacity className='bg-[#cce5ff] p-3 flex-1 rounded-xl items-center shadow-md justify-center mt-2' onPress={() => handelIncidents("flood")}>
-                  <Text className='text-[#339af0]'>Flood</Text>
-                </TouchableOpacity>
+                <View className='flex-row items-center space-x-2 rounded-full'>
+                  <View className='p-2 bg-gray-100 rounded-full'>
+                    <Entypo name="user" size={18} color="black" />
+                  </View>
+                  <Text className='text-black'>{rescuerDetails.name}</Text>
+                </View>
+                <View className='flex-row items-center space-x-2 rounded-full'>
+                  <View className='p-2 bg-gray-100 rounded-full'>
+                    <Entypo name="mail" size={18} color="black" />
+                  </View>
+                  <Text onPress={() => { Linking.openURL(`mailto:${rescuerDetails.email}`); }} className='text-black'>{rescuerDetails.email}</Text>
+                </View>
               </View>
-              <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
-                <View className='p-3 w-12 items-center bg-[#ffccd5] rounded-xl'>
-                  <FontAwesome6 name="house-fire" size={20} color="#ff5252" />
-                </View>
-                <TouchableOpacity className='bg-[#ffccd5] p-3 flex-1 rounded-xl shadow-md items-center justify-center mt-2' onPress={() => handelIncidents("fire")}>
-                  <Text className='text-[#ff5252]'>Fire</Text>
+              <View className='flex-1 flex-row justify-between space-x-1'>
+                <TouchableOpacity className='bg-[#cce5ff] border border-[#339af0] rounded-lg mt-3 p-2 w-1/2 items-center justify-center'>
+                  <Text className='text-[#339af0] font-semibold'>Resolved</Text>
                 </TouchableOpacity>
-              </View>
-              <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
-                <View className='p-3 w-12 items-center bg-[#e4d8c3] rounded-xl'>
-                  <FontAwesome5 name="house-damage" size={20} color="#8d5524" />
-                </View>
-                <TouchableOpacity className='bg-[#e4d8c3] p-3 flex-1 rounded-xl shadow-md items-center justify-center mt-2' onPress={() => handelIncidents("earthquake")}>
-                  <Text className='text-[#8d5524]'>Earthquake</Text>
-                </TouchableOpacity>
-              </View>
-              <View className='flex-row items-center w-full gap-3 mb-2 px-2'>
-                <View className='p-3 w-12 items-center bg-[#1f1f1f6e] rounded-xl'>
-                  <FontAwesome5 name="skull-crossbones" size={20} color="#1f1f1f" />
-                </View>
-                <TouchableOpacity className='bg-[#1f1f1f6e] p-3 flex-1 rounded-xl shadow-md items-center justify-center mt-2' onPress={() => handelIncidents("manmade")}>
-                  <Text className='text-[#1f1f1f]'>Man Made</Text>
+                <TouchableOpacity className='bg-white border-[#3685cd] border rounded-lg mt-3 p-2 w-1/2 items-center justify-center'>
+                  <Text className='text-[#3685cd] font-semibold'>Cancel</Text>
                 </TouchableOpacity>
               </View>
             </View>

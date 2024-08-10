@@ -101,6 +101,7 @@ export default function Dashboard() {
 
           snapshot.forEach((uuidSnapshot: any) => {
             const incident = uuidSnapshot.val();
+            const id = uuidSnapshot.key;
             const rescuers = incident.rescuers || {};
             const isCurrentUserInRescuers = Object.values(rescuers).flat().some((rescuer: any) => rescuer.id === auth.currentUser?.uid);
 
@@ -122,6 +123,7 @@ export default function Dashboard() {
               const datetime = new Date(incident.timestamp)
               setPendingIncidents([]);
               setRescueRequestModalVisible(false);
+              setLocationName(incident.LocationName)
               setMyStatus('rescuing');
               setIncidentVisible(true);
               setIncidentId(uuidSnapshot.key);
@@ -135,6 +137,9 @@ export default function Dashboard() {
               setMobile(incident.userMobile);
               setEmail(incident.userEmail);
               setLocationName(incident.locationName);
+              const incidentRef = ref(db, 'incidents/'+id+'/rescuers/'+auth.currentUser?.uid+'/location')
+              set(incidentRef, location)
+              
             }
           });
 
@@ -157,8 +162,6 @@ export default function Dashboard() {
     // Replace with your destination coordinates
     const currentLocation = `${coords.longitude},${coords.latitude}`;
     const destination = `${incidentLocation.longitude},${incidentLocation.latitude}`;
-    const locationName = await reverseGeocode(incidentLocation.longitude, incidentLocation.latitude);
-    setLocationName(locationName.features[0].properties.full_address);
     const response = await directions(currentLocation, destination);
     const geometry = extractRouteGeometry(await response);
     setRouteGeoJson(geometry);
@@ -222,15 +225,35 @@ export default function Dashboard() {
   };
 
   const handleResolvingIncident = async () => {
-    setMyStatus('idle');
-    setMessageVisible(false);
-    setIncidentLocation(null);
-    setRouteGeoJson(null);
-    setIncidentType('');
-    setIncidentTime('');
-    const incidentRef = ref(db, 'incidents/' + incidentId + '/status');
-    await set(incidentRef, 'resolved');
-    setIncidentVisible(false);
+    Alert.alert(
+      'Confirm Resolve',
+      'Are you sure you want to mark this incident as resolved?',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => console.log('Resolve action cancelled'),
+          style: 'cancel',
+        },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setMyStatus('idle');
+            setMessageVisible(false);
+            setIncidentLocation(null);
+            setRouteGeoJson(null);
+            setIncidentType('');
+            setIncidentTime('');
+            
+            const incidentRef = ref(db, 'incidents/' + incidentId + '/status');
+            await set(incidentRef, 'resolved');
+            
+            setIncidentVisible(false);
+            console.log('Incident marked as resolved');
+          },
+        },
+      ],
+      { cancelable: false }
+    );
   };
 
   const handleCancelIncident = async () => {
@@ -243,6 +266,17 @@ export default function Dashboard() {
     setIncidentVisible(false);
     const incidentRef = ref(db, 'incidents/' + incidentId + '/rescuers/' + auth.currentUser?.uid);
     await remove(incidentRef);
+    const incidentRescuersRef = ref(db, 'incidents/' + incidentId + '/numberofRescuer');
+    get(incidentRescuersRef).then((snapshot) => {
+      if (snapshot.exists()) {
+        const rescuerCount = snapshot.val();
+        set(incidentRescuersRef, rescuerCount - 1);
+      } else {
+        console.log('No data available');
+      }
+    }).catch((error) => {
+      console.error(error);
+    });
   };
 
 
@@ -452,15 +486,15 @@ export default function Dashboard() {
               <Text className="mb-2">{`Time: ${incident.datetime}`}</Text>
               <Text className="mb-4">{`Mobile: ${incident.userMobile}`}</Text>
 
-              <View className="flex-row justify-between">
+              <View className="flex-row justify-between gap-1 w-full">
                 <Pressable
-                  className="bg-green-500 px-4 py-2 rounded-lg"
+                  className="bg-[#3685cd] px-4 py-2 rounded-lg flex-1 items-center"
                   onPress={() => handleAcceptIncident(incident.id)}
                 >
                   <Text className="text-white font-bold">Accept</Text>
                 </Pressable>
                 <Pressable
-                  className="bg-red-500 px-4 py-2 rounded-lg"
+                  className="bg-red-500 px-4 py-2 rounded-lg flex-1 items-center"
                   onPress={() => handleRejectIncident(incident.id)}
                 >
                   <Text className="text-white font-bold">Reject</Text>

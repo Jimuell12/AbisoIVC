@@ -58,7 +58,7 @@ export default function Login() {
                         <Text className='text-2xl font-bold text-[#3685cd]'>Login</Text>
                     </View>
                     <View className='p-5 w-full'>
-                        <Image source={require('../assets/images/abiso_logo.png')} className='w-full'/>
+                        <Image source={require('../assets/images/abiso_logo.png')} className='h-96 w-full'/>
                     </View>
                     <View className='px-8'>
                         <TextInput
