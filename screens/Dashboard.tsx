@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { Alert, Text, View, Image, TouchableOpacity, Linking } from 'react-native'
+import { Alert, Text, View, Image, TouchableOpacity, Linking, Modal, Button, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { auth, db } from '../utils/firebaseConfig';
 import * as Location from 'expo-location';
 import { Entypo, FontAwesome6, Ionicons, FontAwesome5, AntDesign } from '@expo/vector-icons';
 import { CommonActions, Link, useNavigation } from '@react-navigation/native';
 import Mapbox from '@rnmapbox/maps';
-import { get, onValue, ref, set } from 'firebase/database'
+import { get, onValue, push, ref, remove, set } from 'firebase/database'
 import { directions, reverseGeocode } from '../utils/api';
 import LottieView from 'lottie-react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -34,6 +34,11 @@ export default function Dashboard() {
   const [incidentId, setIncidentId] = useState('');
   const [incidentVisible, setIncidentVisible] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [rescueRequestModalVisible, setRescueRequestModalVisible] = useState(true);
+  const [pendingIncidents, setPendingIncidents] = useState<any[]>([]);
+  const [incidentLocation, setIncidentLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [myStatus, setMyStatus] = useState('idle');
+  const [modalVisibility, setModalVisibility] = useState<{ [key: string]: boolean }>({});
 
   const toggleView = () => {
     setIsMinimized(!isMinimized);
@@ -90,64 +95,63 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (location) {
-      const incidentsRef = ref(db, 'incidents');
       const handleIncidentsUpdate = (snapshot: any) => {
         if (snapshot.exists()) {
-          let check = false;
-          snapshot.forEach(async (uuidSnapshot: any) => {
+          let newPendingIncidents: React.SetStateAction<any[]> = [];
+
+          snapshot.forEach((uuidSnapshot: any) => {
             const incident = uuidSnapshot.val();
             const rescuers = incident.rescuers || {};
             const isCurrentUserInRescuers = Object.values(rescuers).flat().some((rescuer: any) => rescuer.id === auth.currentUser?.uid);
 
-            if (isCurrentUserInRescuers && incident.status === 'pending') {
-              check = true
-              const incidentsArray: any = Object.keys(snapshot.val()).map((key) => snapshot.val()[key]);
+            if (!isCurrentUserInRescuers && incident.status === 'pending' && myStatus === 'idle') {
               const datetime = new Date(incident.timestamp);
-              const userUid = incident.reportedBy;
-              const userRef = ref(db, 'users/' + userUid);
-              const userSnapshot = await get(userRef);
-              const userName = userSnapshot.val().name;
-              const userMobile = userSnapshot.val().mobile;
-              const userEmail = userSnapshot.val().email;
-              const messagesCont = incident.messages ? Object.keys(incident.messages).length : 0;
+              setRescueRequestModalVisible(true);
 
+              newPendingIncidents.push({
+                id: uuidSnapshot.key,
+                locationName: incident.locationName,
+                datetime: datetime.toLocaleString(),
+                userName: incident.userName,
+                userMobile: incident.userMobile,
+                ...incident,
+              });
+
+              setModalVisibility((prev) => ({ ...prev, [uuidSnapshot.key]: true }));
+            } else if (isCurrentUserInRescuers && incident.status === 'pending') {
+              const datetime = new Date(incident.timestamp)
+              setPendingIncidents([]);
+              setRescueRequestModalVisible(false);
+              setMyStatus('rescuing');
               setIncidentVisible(true);
-              updateRoute(location!, incident.location);
-              setIncident(incidentsArray);
-              setMessageCount(messagesCont);
-              setName(userName);
-              setMobile(userMobile);
-              setEmail(userEmail);
-              setIncidentType(incident.type);
-              setIncidentTime(datetime.toLocaleString());
-              setMessageVisible(true);
               setIncidentId(uuidSnapshot.key);
+              setIncidentType(incident.type);
               setDestination(`${incident.location.longitude},${incident.location.latitude}`);
-            } else if (isCurrentUserInRescuers && incident.status === 'resolved' && !check) {
-              setMessageVisible(false);
-              setDestination('');
-              setIncident([]);
-              setIncidentType('');
-              setIncidentTime('');
-              setMobile('');
-              setName('');
-              setEmail('');
-              setMessageCount(0);
-              setIncidentId('');
+              setIncidentLocation(incident.location);
+              updateRoute(location, incident.location);
+              setMessageVisible(true);
+              setMessageCount(incident.messages ? Object.keys(incident.messages).length : 0);
+              setIncidentTime(datetime.toLocaleString());
+              setMobile(incident.userMobile);
+              setEmail(incident.userEmail);
+              setLocationName(incident.locationName);
             }
           });
+
+          setPendingIncidents(newPendingIncidents);
         } else {
           console.log('No data available');
         }
       };
 
+      const incidentsRef = ref(db, 'incidents');
       const unsubscribe = onValue(incidentsRef, handleIncidentsUpdate);
 
       return () => {
         unsubscribe();
       };
     }
-  }, [location]);
+  }, [location, myStatus]);
 
   const updateRoute = async (coords: Location.LocationObjectCoords, incidentLocation: Location.LocationObjectCoords) => {
     // Replace with your destination coordinates
@@ -185,6 +189,62 @@ export default function Dashboard() {
       })
     );
   }
+
+  const handleAcceptIncident = async (id: string) => {
+    setMyStatus('rescuing');
+    setRescueRequestModalVisible(false);
+    setPendingIncidents([]);
+
+    const incidentRescuersRef = ref(db, 'incidents/' + id + '/rescuers/' + auth.currentUser?.uid);
+    await set(incidentRescuersRef, {
+      id: auth.currentUser?.uid,
+      location: location,
+    });
+
+    const incidentRef = ref(db, 'incidents/' + id + '/numberofRescuer');
+    get(incidentRef).then((snapshot) => {
+      if (snapshot.exists()) {
+        const rescuerCount = snapshot.val();
+        set(incidentRef, rescuerCount + 1);
+      } else {
+        console.log('No data available');
+      }
+    }).catch((error) => {
+      console.error(error);
+    });
+
+    setModalVisibility((prev) => ({ ...prev, [id]: false }));
+  };
+
+  const handleRejectIncident = async (id: string) => {
+    setMyStatus('idle');
+    setModalVisibility((prev) => ({ ...prev, [id]: false }));
+  };
+
+  const handleResolvingIncident = async () => {
+    setMyStatus('idle');
+    setMessageVisible(false);
+    setIncidentLocation(null);
+    setRouteGeoJson(null);
+    setIncidentType('');
+    setIncidentTime('');
+    const incidentRef = ref(db, 'incidents/' + incidentId + '/status');
+    await set(incidentRef, 'resolved');
+    setIncidentVisible(false);
+  };
+
+  const handleCancelIncident = async () => {
+    setMyStatus('idle');
+    setMessageVisible(false);
+    setIncidentLocation(null);
+    setRouteGeoJson(null);
+    setIncidentType('');
+    setIncidentTime('');
+    setIncidentVisible(false);
+    const incidentRef = ref(db, 'incidents/' + incidentId + '/rescuers/' + auth.currentUser?.uid);
+    await remove(incidentRef);
+  };
+
 
 
   return (
@@ -240,17 +300,16 @@ export default function Dashboard() {
                 />
               </Mapbox.ShapeSource>
             ) : null}
-            {incident.map((incidentDetails: any, index) => (
+            {incidentLocation ? (
               <Mapbox.MarkerView
-                key={incidentDetails.timestamp}
                 allowOverlap={true}
                 allowOverlapWithPuck={true}
-                coordinate={[incidentDetails.location.longitude, incidentDetails.location.latitude]}
+                coordinate={[incidentLocation.longitude, incidentLocation.latitude]}
               >
                 <TouchableOpacity onPress={() => {
 
                 }}>
-                  {incidentDetails.type === 'fire' ? (<LottieView
+                  {incidentType === 'fire' ? (<LottieView
                     autoPlay
                     style={{
                       width: 75,
@@ -258,7 +317,7 @@ export default function Dashboard() {
                     }}
                     source={require(`../assets/animations/fire.json`)}
                   />) : null}
-                  {incidentDetails.type === 'flood' ? (<LottieView
+                  {incidentType === 'flood' ? (<LottieView
                     autoPlay
                     style={{
                       width: 75,
@@ -266,7 +325,7 @@ export default function Dashboard() {
                     }}
                     source={require(`../assets/animations/flood.json`)}
                   />) : null}
-                  {incidentDetails.type === 'earthquake' ? (<LottieView
+                  {incidentType === 'earthquake' ? (<LottieView
                     autoPlay
                     style={{
                       width: 75,
@@ -274,7 +333,7 @@ export default function Dashboard() {
                     }}
                     source={require(`../assets/animations/earthquake.json`)}
                   />) : null}
-                  {incidentDetails.type === 'manmade' ? (<LottieView
+                  {incidentType === 'manmade' ? (<LottieView
                     autoPlay
                     style={{
                       width: 75,
@@ -284,7 +343,8 @@ export default function Dashboard() {
                   />) : null}
                 </TouchableOpacity>
               </Mapbox.MarkerView>
-            ))}
+            ) : null}
+
           </Mapbox.MapView>
           <TouchableOpacity
             className='absolute top-2 right-2 bg-white p-2 rounded-full'
@@ -351,10 +411,10 @@ export default function Dashboard() {
                     </TouchableOpacity>
                   </View>
                   <View className='flex-1 flex-row justify-between space-x-1'>
-                    <TouchableOpacity className='bg-[#cce5ff] border border-[#339af0] rounded-lg mt-3 p-2 w-1/2 items-center justify-center'>
+                    <TouchableOpacity className='bg-[#cce5ff] border border-[#339af0] rounded-lg mt-3 p-2 w-1/2 items-center justify-center' onPress={handleResolvingIncident}>
                       <Text className='text-[#339af0] font-semibold'>Resolved</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className='bg-white border-[#3685cd] border rounded-lg mt-3 p-2 w-1/2 items-center justify-center'>
+                    <TouchableOpacity className='bg-white border-[#3685cd] border rounded-lg mt-3 p-2 w-1/2 items-center justify-center' onPress={handleCancelIncident}>
                       <Text className='text-[#3685cd] font-semibold'>Cancel</Text>
                     </TouchableOpacity>
                   </View>
@@ -374,6 +434,42 @@ export default function Dashboard() {
           />
         </View>
       )}
+      {pendingIncidents.map((incident, index) => (
+        <Modal
+          key={incident.id}
+          visible={modalVisibility[incident.id] || false}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setPendingIncidents((prev) => prev.filter((_, i) => i !== index));
+            setModalVisibility((prev) => ({ ...prev, [incident.id]: false }));
+          }}
+        >
+          <View className="flex-1 justify-center items-center bg-black/50">
+            <View className="w-11/12 bg-white p-5 rounded-lg shadow-lg">
+              <Text className="text-lg font-bold mb-4">{`Incident reported by ${incident.userName}`}</Text>
+              <Text className="mb-2">{`Incident Type: ${incident.type}`}</Text>
+              <Text className="mb-2">{`Time: ${incident.datetime}`}</Text>
+              <Text className="mb-4">{`Mobile: ${incident.userMobile}`}</Text>
+
+              <View className="flex-row justify-between">
+                <Pressable
+                  className="bg-green-500 px-4 py-2 rounded-lg"
+                  onPress={() => handleAcceptIncident(incident.id)}
+                >
+                  <Text className="text-white font-bold">Accept</Text>
+                </Pressable>
+                <Pressable
+                  className="bg-red-500 px-4 py-2 rounded-lg"
+                  onPress={() => handleRejectIncident(incident.id)}
+                >
+                  <Text className="text-white font-bold">Reject</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ))}
 
     </SafeAreaView>
   )

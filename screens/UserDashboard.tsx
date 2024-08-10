@@ -4,7 +4,7 @@ import { Entypo } from '@expo/vector-icons';
 import { auth, db } from '../utils/firebaseConfig';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { equalTo, get, onValue, query, ref, remove, set } from 'firebase/database';
+import { equalTo, get, onValue, push, query, ref, remove, set } from 'firebase/database';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import Mapbox from '@rnmapbox/maps';
 import { Ionicons, AntDesign, FontAwesome5, FontAwesome6 } from '@expo/vector-icons';
@@ -60,6 +60,7 @@ export default function UserDashboard() {
   const [rescuerLocations, setRescuerLocations] = useState([]);
   const [rescuerIds, setRescuerIds] = useState([]);
   const [incidentId, setIncidentId] = useState('');
+  const [userMobile, setUserMobile] = useState('');
 
 
   useEffect(() => {
@@ -94,8 +95,10 @@ export default function UserDashboard() {
           if (snapshot.exists()) {
             const name = snapshot.val().name;
             const imageUrl = snapshot.val().imageUrl;
+            const userMobile = snapshot.val().mobile;
 
             setName(name);
+            setUserMobile(userMobile);
             if (imageUrl) {
               setImageUrl({ uri: imageUrl });
             }
@@ -149,7 +152,7 @@ export default function UserDashboard() {
                     .catch((error) => {
                       console.error('Error deleting incident:', error);
                     });
-                }, 10000); // Check every 10 seconds
+                }, 30000); // Check every 10 seconds
               } else if (numberOfRescuers > 0) {
                 clearInterval(intervalRef.current!);
                 setModalVisible(false);
@@ -206,14 +209,16 @@ export default function UserDashboard() {
   const handelIncidents = (incidentType: string) => {
     setIncident(incidentType);
     setModalVisible(true);
-    const uuid = Math.random().toString(36).substring(7);
-    const incidentRef = ref(db, 'incidents/' + uuid);
-    set(incidentRef, {
+    const incidentRef = ref(db, 'incidents/');
+    push(incidentRef, {
       type: incidentType,
       location: {
         latitude: location?.latitude,
         longitude: location?.longitude
       },
+      userName: name,
+      userMobile: userMobile,
+      userEmail: auth.currentUser?.email,
       reportedBy: auth.currentUser?.uid,
       status: 'pending',
       numberofRescuer: 0,
