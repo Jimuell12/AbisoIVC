@@ -11,6 +11,7 @@ import { Ionicons, AntDesign, FontAwesome5, FontAwesome6 } from '@expo/vector-ic
 import ImageSlider from '../components/imageSlider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
+import { StatusBar } from 'expo-status-bar';
 
 Mapbox.setAccessToken('pk.eyJ1IjoiYWJpc29pdmMiLCJhIjoiY2x5eDh0Z2k0MDcwNTJrcHN0aXl1anA2MiJ9.S94O4y8MKnzyyH7dS_thFw');
 
@@ -58,6 +59,7 @@ export default function UserDashboard() {
   const [messageVisible, setMessageVisible] = useState(false);
   const [rescuerLocations, setRescuerLocations] = useState([]);
   const [rescuerIds, setRescuerIds] = useState([]);
+  const [incidentId, setIncidentId] = useState('');
 
 
   useEffect(() => {
@@ -154,6 +156,7 @@ export default function UserDashboard() {
                 const rescuers = incidentData.rescuers || [];
                 const rescuerArray: any = Object.keys(rescuers).map(uid => rescuers[uid]);
                 setRescuerLocations(rescuerArray);
+                setIncidentId(uuid);
               }
             } else if(incidentData.reportedBy === currentUserUid && incidentData.status === 'resolved' && !check) {
               setRescuerLocations([]);
@@ -222,6 +225,7 @@ export default function UserDashboard() {
 
   return (
     <SafeAreaView className='flex-1 p-2 bg-white'>
+      <StatusBar translucent backgroundColor='transparent' />
       <View className='flex-row justify-between items-center px-2 py-4'>
         <View className='flex-row items-center'>
           <Image className='rounded-full w-12 h-12' source={require('../assets/images/abiso_logo.png')}>
@@ -294,6 +298,7 @@ export default function UserDashboard() {
               onPress={() => navigation.dispatch(
                 CommonActions.navigate({
                   name: 'Messages',
+                  params: { incidentId }
                 })
               )}
             >

@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, Image, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import { AntDesign, Entypo } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../utils/firebaseConfig';
@@ -19,32 +19,32 @@ export default function Settings() {
     useEffect(() => {
         const updateUserDetails = async () => {
             if (auth.currentUser) {
-              const userRef = ref(db, 'users/' + auth.currentUser.uid);
-              get(userRef).then((snapshot) => {
-                if (snapshot.exists()) {
-                  const name = snapshot.val().name;
-                  const imageUrl = snapshot.val().imageUrl;
-                  const email = snapshot.val().email;
-                  const mobile = snapshot.val().mobile;
-                  const address = snapshot.val().address;
-                
-                  setEmail(email);
-                  setName(name);
-                  setMobile(mobile);
-                  setAddress(address)
-                  if (imageUrl) {
-                    setImageUrl({ uri: imageUrl });
-                  }
-                } else {
-                  console.log('No data available');
-                }
-              }).catch((error) => {
-                console.error(error);
-              });
+                const userRef = ref(db, 'users/' + auth.currentUser.uid);
+                get(userRef).then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const name = snapshot.val().name;
+                        const imageUrl = snapshot.val().imageUrl;
+                        const email = snapshot.val().email;
+                        const mobile = snapshot.val().mobile;
+                        const address = snapshot.val().address;
+
+                        setEmail(email);
+                        setName(name);
+                        setMobile(mobile);
+                        setAddress(address)
+                        if (imageUrl) {
+                            setImageUrl({ uri: imageUrl });
+                        }
+                    } else {
+                        console.log('No data available');
+                    }
+                }).catch((error) => {
+                    console.error(error);
+                });
             }
-          };
-        
-          updateUserDetails();
+        };
+
+        updateUserDetails();
     }, []);
 
     const handleChangeimageUrl = () => {
@@ -65,6 +65,17 @@ export default function Settings() {
         };
         handleChangeimageUrl();
     };
+
+    const logout = () => {
+        auth.signOut().then(() => {
+          navigation.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            })
+          );
+        });
+      };
 
     return (
         <SafeAreaView className='flex-1 bg-white'>
@@ -92,7 +103,7 @@ export default function Settings() {
                         </View>
                         <Text className='text-base text-black font-bold mt-2'>@jimflojera</Text>
                     </View>
-                    <View className='p-2'>
+                    <View className='p-2 flex-1'>
                         <Text className='text-lg text-black font-bold px-3'>Account</Text>
                         <Text className='text-sm text-gray-500 px-3 pb-2'>Personal Information</Text>
                         <View className='flex-row p-3 gap-2 items-end'>
@@ -101,7 +112,7 @@ export default function Settings() {
                             </View>
                             <View className='h-12 flex-1'>
                                 <Text className='text-gray-500'>Name</Text>
-                                <TextInput className='border-b-2 border-gray-300 flex-1' value={name} onChangeText={(input)=>{setName(input)}} />
+                                <TextInput className='border-b-2 border-gray-300 flex-1' value={name} onChangeText={(input) => { setName(input) }} />
                             </View>
                         </View>
                         <View className='flex-row p-3 gap-2 items-end'>
@@ -110,7 +121,7 @@ export default function Settings() {
                             </View>
                             <View className='h-12 flex-1'>
                                 <Text className='text-gray-500'>Email</Text>
-                                <TextInput className='border-b-2 border-gray-300 flex-1' value={email} onChangeText={(input)=>{setEmail(input)}} />
+                                <TextInput className='border-b-2 border-gray-300 flex-1' value={email} onChangeText={(input) => { setEmail(input) }} />
                             </View>
                         </View>
                         <View className='flex-row p-3 gap-2 items-end'>
@@ -119,7 +130,7 @@ export default function Settings() {
                             </View>
                             <View className='h-12 flex-1'>
                                 <Text className='text-gray-500'>Mobile No.</Text>
-                                <TextInput className='border-b-2 border-gray-300 flex-1' value={mobile} onChangeText={(input)=>{setMobile(input)}} />
+                                <TextInput className='border-b-2 border-gray-300 flex-1' value={mobile} onChangeText={(input) => { setMobile(input) }} />
                             </View>
                         </View>
                         <View className='flex-row p-3 gap-2 items-end'>
@@ -128,13 +139,18 @@ export default function Settings() {
                             </View>
                             <View className='h-12 flex-1'>
                                 <Text className='text-gray-500'>Address</Text>
-                                <TextInput className='border-b-2 border-gray-300 flex-1' value={address} onChangeText={(input)=>{setAddress(input)}} />
+                                <TextInput className='border-b-2 border-gray-300 flex-1' value={address} onChangeText={(input) => { setAddress(input) }} />
                             </View>
                         </View>
                         <Text className='px-3 text-red-400'>Error here</Text>
-                        <TouchableOpacity className='bg-gray-800 p-3 rounded-lg m-3'>
-                            <Text className='text-white text-center'>Save Changes</Text>
-                        </TouchableOpacity>
+                        <View className='flex-1 justify-end'>
+                            <TouchableOpacity className='bg-gray-800 p-3 rounded-lg mx-3 mt-2'>
+                                <Text className='text-white text-center'>Save Changes</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity className='bg-red-500 p-3 rounded-lg mx-3 my-2' onPress={logout}>
+                                <Text className='text-white text-center'>Logout</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>

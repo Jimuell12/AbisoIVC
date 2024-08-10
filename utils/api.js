@@ -45,3 +45,14 @@ export const reverseGeocode = async (longitude, latitude) => {
     throw error;
   }
 }
+
+export const imageToBlob = async (uri) => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return blob;
+  } catch (error) {
+    console.error('Error converting image to blob!', error);
+    throw error;
+  }
+}
